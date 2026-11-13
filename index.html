@@ -92,7 +92,7 @@
 
 <nav class="tabs hidden" id="tabs" role="tablist">
   <button role="tab" aria-selected="true" data-view="register">Register</button>
-  <button role="tab" aria-selected="false" data-view="admin">Registered list</button>
+  <button role="tab" aria-selected="false" data-view="admin">Check registration</button>
 </nav>
 
 <main>
@@ -183,10 +183,10 @@
   <section id="view-admin" class="hidden">
     <div class="card">
       <div class="members-head">
-        <div><h2>Registered list</h2><div class="count" id="admin-count">Loading…</div></div>
-        <div style="min-width:220px;flex:0 1 280px"><input id="search" type="search" placeholder="Search your name" aria-label="Search the registered list"></div>
+        <div><h2>Check your registration</h2><div class="count" id="admin-count">Type at least 3 letters of your first or last name.</div></div>
+        <div style="min-width:220px;flex:0 1 320px;display:flex;gap:8px"><input id="search" type="search" enterkeyhint="search" placeholder="e.g. Dela Cruz" aria-label="Search your name"><button class="ghost" type="button" id="search-btn">Search</button></div>
       </div>
-      <p class="hint" style="margin:0">Find your name to confirm your registration. Birthdays and contact details are kept private by the church office.</p>
+      <p class="hint" style="margin:0">Only names that match your search are shown. Birthdays and contact details are kept private by the church office.</p>
       <span class="note" id="admin-msg"></span>
       <div style="overflow-x:auto"><table id="admin-table"><thead><tr><th>Name</th><th>Type</th><th>Household</th><th>Registered</th></tr></thead><tbody></tbody></table></div>
     </div>
@@ -222,7 +222,7 @@
 
   let type = 'individual';
   // Paste your Google Apps Script web app URL here (see setup steps in Code.gs).
-  const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbywnforYOcQjrxEcHbzd8Z_gI3TkosQMvxnCA0wbCk6MCuDqzkXxMRgIwwkp3zVe665/exec';
+  const SCRIPT_URL = '';
 
   // ---------- type toggle ----------
   document.querySelectorAll('.seg button').forEach(b => b.addEventListener('click', () => setType(b.dataset.type)));
@@ -249,7 +249,7 @@
     const addr = node.querySelector('.m-address');
     addr.value = $('#h-address').value.trim();
     addr.addEventListener('input', () => { addr.dataset.auto = addr.value.trim() ? '0' : '1'; });
-    node.querySelector('.remove').addEventListener('click', () => { node.remove(); relabel(); });
+    node.querySelector('.remove').addEventListener('click', () => { node.remove(); relabel(); if (issuesShown){ const bad=[...document.querySelectorAll('.invalid')]; bad.length ? showIssues(bad,false) : hideIssues(); } });
     $('#members').appendChild(node);
     relabel();
     if (focus) node.querySelector('.m-first').focus();
@@ -276,6 +276,7 @@
     if (el.hasAttribute('data-req') && !v) msg = 'Required';
     else if (el.hasAttribute('data-date') && v && v > today) msg = 'Birthday cannot be in the future';
     else if (el.type === 'email' && v && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) msg = 'Check the email format';
+    else if (el.type === 'tel' && v && !/^(09\d{9}|\+639\d{9})$/.test(v.replace(/[\s-]/g,''))) msg = 'Use 11 digits starting with 09, e.g. 0917 123 4567';
     el.classList.toggle('invalid', !!msg);
     let e = el.parentElement.querySelector('.err');
     if (msg){ if(!e){ e = document.createElement('div'); e.className='err'; el.parentElement.appendChild(e);} e.textContent = msg; }
@@ -284,14 +285,64 @@
   }
   document.addEventListener('input', e => { if (e.target.classList.contains('invalid')) check(e.target); });
 
+  // ---------- "what is missing" summary ----------
+  let issuesShown = false;
+  function fieldName(el){
+    const l = el.parentElement.querySelector('label');
+    return l ? l.textContent.replace('*','').trim().replace(/\b\w/g, c => c.toUpperCase()).replace(/\B\w+/g, w => w.toLowerCase()) : 'Field';
+  }
+  function groupName(el){
+    const m = el.closest('.member');
+    if (m){
+      const n = (m.querySelector('.m-first').value + ' ' + m.querySelector('.m-last').value).trim();
+      return m.querySelector('.mlabel').textContent + (n ? ' (' + n + ')' : '');
+    }
+    return el.closest('#household-card') ? 'Household details' : 'Your details';
+  }
+  function showIssues(bad, jump){
+    const groups = new Map();
+    bad.forEach(el => {
+      const g = groupName(el);
+      if (!groups.has(g)) groups.set(g, []);
+      groups.get(g).push(el);
+    });
+    const b = $('#form-error'); b.replaceChildren();
+    const head = document.createElement('div'); head.style.fontWeight = '600';
+    head.textContent = (bad.length === 1 ? 'One thing is missing or needs fixing' : bad.length + ' things are missing or need fixing') + '. Tap an item to go to it.';
+    const ul = document.createElement('ul'); ul.style.cssText = 'margin:8px 0 0;padding-left:18px';
+    groups.forEach((els, g) => {
+      const li = document.createElement('li'); li.style.marginBottom = '4px';
+      const strong = document.createElement('b'); strong.textContent = g + ': '; li.appendChild(strong);
+      els.forEach((el, i) => {
+        const a = document.createElement('button'); a.type = 'button';
+        a.style.cssText = 'background:none;border:none;padding:0;color:#B91E25;text-decoration:underline;cursor:pointer;font:inherit;text-align:left;display:inline';
+        const why = (el.parentElement.querySelector('.err') || {}).textContent || 'Required';
+        a.textContent = fieldName(el) + (why === 'Required' ? '' : ' (' + why.toLowerCase() + ')');
+        a.addEventListener('click', () => { el.scrollIntoView({behavior:'smooth', block:'center'}); el.focus({preventScroll:true}); });
+        li.appendChild(a);
+        if (i < els.length - 1) li.appendChild(document.createTextNode(', '));
+      });
+      ul.appendChild(li);
+    });
+    b.append(head, ul); b.classList.remove('hidden'); issuesShown = true;
+    if (jump) b.scrollIntoView({behavior:'smooth', block:'center'});
+  }
+  function hideIssues(){ if (issuesShown){ $('#form-error').classList.add('hidden'); issuesShown = false; } }
+  // Keep the summary current as people fix fields.
+  ['input','change'].forEach(ev => document.addEventListener(ev, () => {
+    if (!issuesShown) return;
+    const bad = [...document.querySelectorAll('.invalid')].filter(el => !check(el) );
+    bad.length ? showIssues(bad, false) : hideIssues();
+  }));
+
   function collect(){
     const scope = type === 'individual' ? $('#individual-card') : document.querySelector('#household-card').parentElement;
     const fields = type === 'individual'
       ? [...$('#individual-card').querySelectorAll('input, select[data-req]')]
       : [...$('#household-card').querySelectorAll('input'), ...$('#members').querySelectorAll('input, select[data-req]')];
-    let ok = true, first = null;
-    fields.forEach(f => { if (!check(f)){ ok = false; first = first || f; } });
-    if (!ok){ first.focus(); return null; }
+    const bad = fields.filter(f => !check(f));
+    if (bad.length){ showIssues(bad, true); return null; }
+    hideIssues();
     const now = new Date().toISOString();
     if (type === 'individual'){
       return { type:'individual', submittedAt: now,
@@ -353,7 +404,7 @@
       }
       if (!saved){
         btn.disabled = false; btn.textContent = 'Submit registration';
-        const b = $('#form-error'); b.textContent = 'The registration was not saved. ' + problem + ' Please try again, or give your details to an usher.'; b.classList.remove('hidden');
+        issuesShown = false; const b = $('#form-error'); b.textContent = 'The registration was not saved. ' + problem + ' Please try again, or give your details to an usher.'; b.classList.remove('hidden');
         return;
       }
       rosterLoaded = false;
@@ -385,29 +436,25 @@
     window.scrollTo({top:0, behavior:'smooth'});
   });
 
-  // ---------- registered list (names only) ----------
-  let roster = [], rosterLoaded = false;
+  // ---------- name search (no full list is ever loaded) ----------
+  let rosterLoaded = false; // kept for the submit code
   document.querySelectorAll('#tabs button').forEach(b => b.addEventListener('click', () => {
     document.querySelectorAll('#tabs button').forEach(x => x.setAttribute('aria-selected', x === b));
     $('#view-register').classList.toggle('hidden', b.dataset.view !== 'register');
     $('#view-admin').classList.toggle('hidden', b.dataset.view !== 'admin');
-    if (b.dataset.view === 'admin' && !rosterLoaded) loadRoster();
+    if (b.dataset.view === 'admin') setTimeout(() => $('#search').focus(), 50);
   }));
   const regDate = s => s ? new Date(s).toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'}) : '';
 
-  function renderRoster(){
-    const q = $('#search').value.trim().toLowerCase();
-    const people = roster.slice().sort((a,b) => a.name.localeCompare(b.name));
-    const shown = q ? people.filter(p => (p.name + ' ' + p.household).toLowerCase().includes(q)) : people;
-    const households = new Set(roster.filter(p => p.type === 'household').map(p => p.id)).size;
-    $('#admin-count').textContent = `${people.length} ${people.length===1?'person':'people'} registered · ${households} household${households===1?'':'s'}`;
+  function showRows(people, q){
     const tb = $('#admin-table').tBodies[0]; tb.replaceChildren();
-    if (!shown.length){
+    if (!people.length){
       const tr = document.createElement('tr'); const td = document.createElement('td'); td.colSpan = 4; td.className = 'note';
-      td.textContent = q ? 'No name matches that search. If you registered, check the spelling or ask the church office.' : 'No registrations yet.';
-      tr.appendChild(td); tb.appendChild(tr); return;
+      td.textContent = q ? `No registration found for "${q}". Check the spelling, or ask an usher.` : '';
+      if (q){ tr.appendChild(td); tb.appendChild(tr); }
+      return;
     }
-    shown.forEach(p => {
+    people.forEach(p => {
       const tr = document.createElement('tr');
       const n = document.createElement('td'); n.textContent = p.name; tr.appendChild(n);
       const t = document.createElement('td'); const pill = document.createElement('span'); pill.className = 'pill ' + (p.type==='household'?'h':'i'); pill.textContent = p.type; t.appendChild(pill); tr.appendChild(t);
@@ -415,17 +462,33 @@
       tb.appendChild(tr);
     });
   }
-  $('#search').addEventListener('input', renderRoster);
 
-  async function loadRoster(){
-    $('#admin-count').textContent = 'Loading…';
+  let searchTimer = null, searchSeq = 0;
+  async function runSearch(){
+    clearTimeout(searchTimer);
+    const q = $('#search').value.trim();
+    if (q.replace(/\s/g,'').length < 3){
+      $('#admin-count').textContent = 'Type at least 3 letters of your first or last name.';
+      showRows([], ''); return;
+    }
+    const mine = ++searchSeq;
+    $('#admin-count').textContent = 'Searching…';
     try {
-      const res = await fetch(SCRIPT_URL + '?action=list');
-      const out = await res.json();
+      const out = await (await fetch(SCRIPT_URL + '?action=search&q=' + encodeURIComponent(q))).json();
+      if (mine !== searchSeq) return; // a newer search is running
       if (!out.ok) throw new Error();
-      roster = out.people || []; rosterLoaded = true; renderRoster();
-    } catch(_){ $('#admin-count').textContent = 'The list could not be loaded. Check your connection and try again.'; }
+      const people = out.people || [];
+      $('#admin-count').textContent = people.length
+        ? `${people.length} match${people.length===1?'':'es'}` + (out.more ? ' (showing the first ' + people.length + '; type more of your name)' : '')
+        : 'No match.';
+      showRows(people, q);
+    } catch(_){
+      if (mine === searchSeq) $('#admin-count').textContent = 'Search could not connect. Check your connection and try again.';
+    }
   }
+  $('#search').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(runSearch, 500); });
+  $('#search').addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); runSearch(); } });
+  $('#search-btn').addEventListener('click', runSearch);
 
   if (SCRIPT_URL){ $('#tabs').classList.remove('hidden'); }
   else { $('#save-note').textContent = 'Setup needed: SCRIPT_URL is empty, so submissions will not be saved.'; }
