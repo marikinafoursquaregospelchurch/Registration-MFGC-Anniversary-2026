@@ -222,7 +222,7 @@
 
   let type = 'individual';
   // Paste your Google Apps Script web app URL here (see setup steps in Code.gs).
-  const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxS0d3xw5IOZZN0cbIxAGQdzWk-hIPxEmFRUSgOuXROw4y3aElGXQS48vCb0xlhX_-G/exec';
+  const SCRIPT_URL = '';
 
   // ---------- type toggle ----------
   document.querySelectorAll('.seg button').forEach(b => b.addEventListener('click', () => setType(b.dataset.type)));
@@ -331,16 +331,32 @@
     const btn = $('#submit'); btn.disabled = true; btn.textContent = 'Submitting…';
     let saved = false;
     if (SCRIPT_URL){
+      // Our own ID lets us confirm a save even if the reply is lost, and stops double saves on retry.
+      r.clientId = r.clientId || (Date.now().toString(36) + Math.random().toString(36).slice(2,6));
+      let problem = '';
       try {
-        const res = await fetch(SCRIPT_URL, { method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify(r) });
-        const out = await res.json();
-        if (!out.ok) throw new Error(out.error || 'The sheet did not accept the registration.');
-        r._id = out.id; saved = true; rosterLoaded = false;
+        const res = await fetch(SCRIPT_URL, { method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify(r), redirect:'follow' });
+        const text = await res.text();
+        let out = null;
+        try { out = JSON.parse(text); } catch(_){ problem = 'The registration server sent an unexpected reply. The church office needs to redeploy the Apps Script.'; }
+        if (out && out.ok){ r._id = out.id; saved = true; }
+        else if (out){ problem = out.error || 'The sheet did not accept the registration.'; }
       } catch(err){
+        problem = 'Could not reach the registration server.';
+      }
+      if (!saved && !/needs a|is required|No names/.test(problem)){
+        // Reply lost or unreadable: ask the sheet whether this registration landed anyway.
+        try {
+          const chk = await (await fetch(SCRIPT_URL + '?action=check&id=' + encodeURIComponent(r.clientId))).json();
+          if (chk && chk.saved){ r._id = r.clientId; saved = true; }
+        } catch(_){}
+      }
+      if (!saved){
         btn.disabled = false; btn.textContent = 'Submit registration';
-        const b = $('#form-error'); b.textContent = 'The registration was not saved. ' + (err && err.message ? err.message : 'Check your connection and try again.'); b.classList.remove('hidden');
+        const b = $('#form-error'); b.textContent = 'The registration was not saved. ' + problem + ' Please try again, or give your details to an usher.'; b.classList.remove('hidden');
         return;
       }
+      rosterLoaded = false;
     }
     btn.disabled = false; btn.textContent = 'Submit registration';
     $('#form').classList.add('hidden');
