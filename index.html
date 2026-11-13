@@ -122,8 +122,9 @@
           <div><label for="i-first">First name <span class="req">*</span></label><input id="i-first" autocomplete="given-name" data-req></div>
           <div><label for="i-last">Last name <span class="req">*</span></label><input id="i-last" autocomplete="family-name" data-req></div>
           <div><label for="i-bday">Birthday <span class="req">*</span></label><input id="i-bday" type="date" data-req data-date></div>
+          <div><label for="i-gender">Gender <span class="req">*</span></label><select id="i-gender" data-req><option value="">Select</option><option>Male</option><option>Female</option></select></div>
           <div><label for="i-mobile">Mobile number</label><input id="i-mobile" type="tel" placeholder="09XX XXX XXXX" autocomplete="tel"></div>
-          <div class="full"><label for="i-email">Email</label><input id="i-email" type="email" autocomplete="email"></div>
+          <div><label for="i-email">Email</label><input id="i-email" type="email" autocomplete="email"></div>
           <div class="full"><label for="i-address">Address</label><input id="i-address" placeholder="Street, Barangay, City" autocomplete="street-address"></div>
         </div>
       </div>
@@ -202,10 +203,11 @@
       <div><label>First name <span class="req">*</span></label><input class="m-first" data-req></div>
       <div><label>Last name <span class="req">*</span></label><input class="m-last" data-req></div>
       <div><label>Birthday <span class="req">*</span></label><input class="m-bday" type="date" data-req data-date></div>
+      <div><label>Gender <span class="req">*</span></label><select class="m-gender" data-req><option value="">Select</option><option>Male</option><option>Female</option></select></div>
       <div><label>Relationship</label>
         <select class="m-rel"><option>Head</option><option>Spouse</option><option>Son</option><option>Daughter</option><option>Parent</option><option>Grandparent</option><option>Grandchild</option><option>Sibling</option><option>Relative</option><option>Other</option></select>
       </div>
-      <div class="w2"><label>Contact number</label><input class="m-mobile" type="tel" placeholder="09XX XXX XXXX"></div>
+      <div><label>Contact number</label><input class="m-mobile" type="tel" placeholder="09XX XXX XXXX"></div>
       <div class="w2"><label>Email</label><input class="m-email" type="email"></div>
       <div class="full"><label>Address</label><input class="m-address" placeholder="Street, Barangay, City" data-auto="1"></div>
     </div>
@@ -220,7 +222,7 @@
 
   let type = 'individual';
   // Paste your Google Apps Script web app URL here (see setup steps in Code.gs).
-  const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzw8xifvO3MSf5mB-fuGWTjly8ciZxTzcKcOMC4cLNODeUmmEO3C1h3ZKqgmqvHFOQI/exec';
+  const SCRIPT_URL = '';
 
   // ---------- type toggle ----------
   document.querySelectorAll('.seg button').forEach(b => b.addEventListener('click', () => setType(b.dataset.type)));
@@ -285,8 +287,8 @@
   function collect(){
     const scope = type === 'individual' ? $('#individual-card') : document.querySelector('#household-card').parentElement;
     const fields = type === 'individual'
-      ? [...$('#individual-card').querySelectorAll('input')]
-      : [...$('#household-card').querySelectorAll('input'), ...$('#members').querySelectorAll('input')];
+      ? [...$('#individual-card').querySelectorAll('input, select[data-req]')]
+      : [...$('#household-card').querySelectorAll('input'), ...$('#members').querySelectorAll('input, select[data-req]')];
     let ok = true, first = null;
     fields.forEach(f => { if (!check(f)){ ok = false; first = first || f; } });
     if (!ok){ first.focus(); return null; }
@@ -295,12 +297,12 @@
       return { type:'individual', submittedAt: now,
         name: $('#i-first').value.trim() + ' ' + $('#i-last').value.trim(),
         mobile: $('#i-mobile').value.trim(), email: $('#i-email').value.trim(), address: $('#i-address').value.trim(),
-        members: [{ first: $('#i-first').value.trim(), last: $('#i-last').value.trim(), birthday: $('#i-bday').value, relationship: 'Self', mobile: $('#i-mobile').value.trim(), email: $('#i-email').value.trim(), address: $('#i-address').value.trim() }] };
+        members: [{ first: $('#i-first').value.trim(), last: $('#i-last').value.trim(), birthday: $('#i-bday').value, gender: $('#i-gender').value, relationship: 'Self', mobile: $('#i-mobile').value.trim(), email: $('#i-email').value.trim(), address: $('#i-address').value.trim() }] };
     }
     return { type:'household', submittedAt: now,
       name: $('#h-name').value.trim(),
       address: $('#h-address').value.trim(),
-      members: [...$('#members').children].map(m => ({ first: m.querySelector('.m-first').value.trim(), last: m.querySelector('.m-last').value.trim(), birthday: m.querySelector('.m-bday').value, relationship: m.querySelector('.m-rel').value,
+      members: [...$('#members').children].map(m => ({ first: m.querySelector('.m-first').value.trim(), last: m.querySelector('.m-last').value.trim(), birthday: m.querySelector('.m-bday').value, gender: m.querySelector('.m-gender').value, relationship: m.querySelector('.m-rel').value,
         mobile: m.querySelector('.m-mobile').value.trim(), email: m.querySelector('.m-email').value.trim(), address: m.querySelector('.m-address').value.trim() })) };
   }
 
@@ -309,13 +311,13 @@
 
   function summaryText(r){
     const lines = [(r.type === 'household' ? 'Household: ' : 'Individual: ') + r.name];
-    r.members.forEach(m => lines.push(`- ${m.first} ${m.last} | ${m.birthday} | ${m.relationship}` + [m.mobile, m.email, m.address].filter(Boolean).map(v => ' | ' + v).join('')));
+    r.members.forEach(m => lines.push(`- ${m.first} ${m.last} | ${m.birthday} | ${m.gender} | ${m.relationship}` + [m.mobile, m.email, m.address].filter(Boolean).map(v => ' | ' + v).join('')));
     return lines.join('\n');
   }
   function renderSummary(r){
     const t = document.createElement('table');
-    t.innerHTML = '<thead><tr><th>Name</th><th>Birthday</th><th>Age</th><th>Relationship</th><th>Contact</th></tr></thead><tbody></tbody>';
-    r.members.forEach(m => { const tr = document.createElement('tr'); [m.first+' '+m.last, fmtDate(m.birthday), age(m.birthday), m.relationship, [m.mobile, m.email].filter(Boolean).join(' · ')].forEach(v => { const td = document.createElement('td'); td.textContent = v; tr.appendChild(td); }); t.tBodies[0].appendChild(tr); });
+    t.innerHTML = '<thead><tr><th>Name</th><th>Birthday</th><th>Age</th><th>Gender</th><th>Relationship</th><th>Contact</th></tr></thead><tbody></tbody>';
+    r.members.forEach(m => { const tr = document.createElement('tr'); [m.first+' '+m.last, fmtDate(m.birthday), age(m.birthday), m.gender, m.relationship, [m.mobile, m.email].filter(Boolean).join(' · ')].forEach(v => { const td = document.createElement('td'); td.textContent = v; tr.appendChild(td); }); t.tBodies[0].appendChild(tr); });
     $('#done-summary').replaceChildren(t);
   }
 
